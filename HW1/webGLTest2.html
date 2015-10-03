@@ -1,0 +1,155 @@
+<html>
+<head>
+    <meta charset="utf-8">
+    <script id="vertex" type="x-shader">
+        attribute vec2 aVertexPosition;
+        attribute vec4 vColor;
+
+        varying vec4 fColor;
+
+        void main() {
+            gl_Position = vec4(aVertexPosition, 0.0, 1.0);
+            gl_PointSize = 10.0;
+            fColor = vColor;
+
+
+        }
+    </script>
+    <script id="fragment" type="x-shader">
+        #ifdef GL_ES
+            precision highp float;
+        #endif
+        varying vec4 fColor;
+        void main() {
+            gl_FragColor = fColor;
+
+        }
+    </script>
+    <script type="text/javascript">
+
+    var points = [];
+    var index = 0;
+    function init1(){
+            //create new canvas and webgl elements
+            var canvas = document.getElementById("mycanvas");
+            gl = canvas.getContext("experimental-webgl");   
+            gl.viewport(0, 0, canvas.width, canvas.height);
+            gl.clearColor(1.0, 1.0, 1.0, 1.0);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            //load shaders in order to draw points and lines
+            var v = document.getElementById("vertex").firstChild.nodeValue;
+            var f = document.getElementById("fragment").firstChild.nodeValue;
+
+            var vs = gl.createShader(gl.VERTEX_SHADER);
+            gl.shaderSource(vs, v);
+            gl.compileShader(vs);
+
+            var fs = gl.createShader(gl.FRAGMENT_SHADER);
+            gl.shaderSource(fs, f);
+            gl.compileShader(fs);
+            
+            //initialize the WebGL program and attach the necessary shaders
+            var program = gl.createProgram();
+            gl.attachShader(program, vs);
+            gl.attachShader(program, fs);
+            gl.linkProgram(program);
+
+            gl.useProgram(program);
+
+            //make everything black and create arrays to hold the points that we place on the screen
+            color= [0.0, 0.0, 0.0, 1.0];
+            var vbuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vbuffer);                                       
+            gl.bufferData(gl.ARRAY_BUFFER, 8*200, gl.STATIC_DRAW);
+            program.aVertexPosition = gl.getAttribLocation(program, "aVertexPosition");
+            gl.enableVertexAttribArray(program.aVertexPosition);
+            gl.vertexAttribPointer(program.aVertexPosition, 2, gl.FLOAT, false, 0, 0);
+
+
+            //enable mouse double click
+            canvas.addEventListener('dblclick', function(){ 
+
+                console.log("double click!");
+            });
+
+            //enable mouse click to add points
+            canvas.addEventListener("click", function(event){
+                var i = index;
+               
+                p = getMousePos(canvas,event);
+                console.log(event.x, event.y, p);
+                var pts = [p.x, p.y];
+                points.push(pts);
+
+                gl.bindBuffer(gl.ARRAY_BUFFER, vbuffer);                                       
+                gl.bufferSubData(gl.ARRAY_BUFFER, 8*i, new Float32Array(pts));
+
+                console.log(points)
+                index++;
+
+                render();
+            });
+
+            render();   
+
+    }
+
+    function edgeDected(points) {
+        /*
+            Detect edges given the array of points.
+            :param points:  array of 2 element arrays, each internal array represents a different point
+        */
+        var temp,x,mx;
+        var i;
+
+
+        if(y1>y2)
+        {
+            temp=x1,x1=x2,x2=temp;
+            temp=y1,y1=y2,y2=temp;
+        }
+
+        if(y1==y2)
+            mx=x2-x1;
+        else
+            mx=(x2-x1)/(y2-y1);
+
+        x=x1;
+
+        for(i=int(y1);i<=(int)y2;i++)
+        {
+            if(x<(float)le[i]) 
+                le[i]=(int)x;
+            if(x>(float)re[i]) 
+                re[i]=(int)x;
+            
+            x+=mx;
+        }
+
+        }
+
+    function getMousePos(canvas, evt) {
+        var rect = canvas.getBoundingClientRect();
+        return {
+           x: -1 + 2*event.clientX/canvas.width,
+           y: -1 + 2*(canvas.height - event.clientY)/canvas.height
+          //x: evt.clientX - rect.left,
+          //y: evt.clientY - rect.top
+        };
+    }
+
+    function render(){
+        gl.clear( gl.COLOR_BUFFER_BIT );
+        gl.drawArrays(gl.POINT, 0, index)
+        gl.drawArrays(gl.LINE_LOOP, 0, index);
+
+
+        window.requestAnimationFrame(render);           
+
+    }
+    </script>
+</head>
+<body onload="init1()">
+        <canvas id="mycanvas" width="800" height="500"></canvas>
+</body>
