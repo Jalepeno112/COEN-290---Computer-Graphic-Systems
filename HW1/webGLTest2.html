@@ -1,7 +1,22 @@
+<!--
+    NAME:   Giovanni Briggs
+    DATE:   10/6/15
+    CLASS:  COEN 290
+
+    This code was designed following the tutorial given at:
+        http://www.cs.rit.edu/~icss571/filling/example.html
+
+    The click to draw functionality was found on a StackOverflow article:
+        http://stackoverflow.com/questions/31322725/draw-points-on-click-in-webgl
+    It was modified to meet the current requirements.
+-->
 <html>
 <head>
     <meta charset="utf-8">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+
     <script id="vertex" type="x-shader">
+        //shader for vertices and points in general
         attribute vec2 aVertexPosition;
         attribute vec4 vColor;
 
@@ -9,16 +24,13 @@
 
         void main() {
             gl_Position = vec4(aVertexPosition, 0.0, 1.0);
-            gl_PointSize = 10.0;
+            gl_PointSize = 5.0;
             fColor = vColor;
-
-
         }
     </script>
     <script id="fragment" type="x-shader">
-        #ifdef GL_ES
-            precision highp float;
-        #endif
+        //shader for fragments
+        precision highp float;
         varying vec4 fColor;
         void main() {
             gl_FragColor = fColor;
@@ -29,119 +41,337 @@
 
     var points = [];
     var index = 0;
-    function init1(){
-            //create new canvas and webgl elements
-            var canvas = document.getElementById("mycanvas");
-            gl = canvas.getContext("experimental-webgl");   
-            gl.viewport(0, 0, canvas.width, canvas.height);
-            gl.clearColor(1.0, 1.0, 1.0, 1.0);
-            gl.clear(gl.COLOR_BUFFER_BIT);
+    function init(){
+        /**
+         * Main event loop.  
+         * Initializes all buffers and handles mouse click events.
+         */
 
-            //load shaders in order to draw points and lines
-            var v = document.getElementById("vertex").firstChild.nodeValue;
-            var f = document.getElementById("fragment").firstChild.nodeValue;
+        //create new canvas and webgl elements
+        var canvas = document.getElementById("mycanvas");
+        gl = canvas.getContext("experimental-webgl");   
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
 
-            var vs = gl.createShader(gl.VERTEX_SHADER);
-            gl.shaderSource(vs, v);
-            gl.compileShader(vs);
+        //load shaders in order to draw points and lines
+        var v = document.getElementById("vertex").firstChild.nodeValue;
+        var f = document.getElementById("fragment").firstChild.nodeValue;
 
-            var fs = gl.createShader(gl.FRAGMENT_SHADER);
-            gl.shaderSource(fs, f);
-            gl.compileShader(fs);
-            
-            //initialize the WebGL program and attach the necessary shaders
-            var program = gl.createProgram();
-            gl.attachShader(program, vs);
-            gl.attachShader(program, fs);
-            gl.linkProgram(program);
+        //compile vertex shader
+        var vs = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, v);
+        gl.compileShader(vs);
 
-            gl.useProgram(program);
+        //compile fragment shader
+        var fs = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, f);
+        gl.compileShader(fs);
+        
+        //initialize the WebGL program and attach the necessary shaders
+        var program = gl.createProgram();
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+        gl.linkProgram(program);
 
-            //make everything black and create arrays to hold the points that we place on the screen
-            color= [0.0, 0.0, 0.0, 1.0];
-            var vbuffer = gl.createBuffer();
-            gl.bindBuffer(gl.ARRAY_BUFFER, vbuffer);                                       
-            gl.bufferData(gl.ARRAY_BUFFER, 8*200, gl.STATIC_DRAW);
-            program.aVertexPosition = gl.getAttribLocation(program, "aVertexPosition");
-            gl.enableVertexAttribArray(program.aVertexPosition);
-            gl.vertexAttribPointer(program.aVertexPosition, 2, gl.FLOAT, false, 0, 0);
+        gl.useProgram(program);
+
+        //make everything black and create an array to hold the vertices that we place on the screen
+        //NOTE: we can't have more than 200 vertices
+        color= [0.0, 0.0, 0.0, 1.0];
+        var vbuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbuffer);                                       
+        gl.bufferData(gl.ARRAY_BUFFER, 8*100000, gl.STATIC_DRAW);
+        program.aVertexPosition = gl.getAttribLocation(program, "aVertexPosition");
+        gl.enableVertexAttribArray(program.aVertexPosition);
+        gl.vertexAttribPointer(program.aVertexPosition, 2, gl.FLOAT, false, 0, 0);
 
 
-            //enable mouse double click
-            canvas.addEventListener('dblclick', function(){ 
+        //enable mouse double click
+        canvas.addEventListener('dblclick', function(){ 
+            console.log("double click!");
+            //upon double click, chek all of the edges and fill the polygon
+            var fill = edgeDetect(points, canvas);
 
-                console.log("double click!");
-            });
-
-            //enable mouse click to add points
-            canvas.addEventListener("click", function(event){
-                var i = index;
-               
-                p = getMousePos(canvas,event);
-                console.log(event.x, event.y, p);
-                var pts = [p.x, p.y];
-                points.push(pts);
-
-                gl.bindBuffer(gl.ARRAY_BUFFER, vbuffer);                                       
-                gl.bufferSubData(gl.ARRAY_BUFFER, 8*i, new Float32Array(pts));
-
-                console.log(points)
+            //add all of the points to the point buffer and then render all of the points.
+            for (i = 0; i < fill.length;i++) {
+                addPoint(fill[i][0], fill[i][1], vbuffer,index);
                 index++;
+            }
+            render();
+        });
 
-                render();
-            });
+        //enable mouse click to add points
+        canvas.addEventListener("click", function(event){     
+            //  convert the mouse click coordinates to webgl coordinates        
+            var p = getMousePos(canvas,event);
+            console.log(event.x, event.y, p);
+            // push the point into an array
+            var pts = {x:p.x, y:p.y, screen_x:event.x, screen_y:event.y};
+            points.push(pts);
 
-            render();   
+            // add point to webgl buffer
+            addPoint(p.x,p.y,vbuffer,index);
+            index++;
+        });
+
+        render();   
 
     }
 
-    function edgeDected(points) {
-        /*
-            Detect edges given the array of points.
-            :param points:  array of 2 element arrays, each internal array represents a different point
-        */
-        var temp,x,mx;
-        var i;
+    function addPoint(x,y,buffer,length) {
+         /**
+         * Add a point to the given buffer.  
+         *
+         * @param x         the x coordinate
+         * @param y         the y coordinate
+         * @param buffer    the buffer we are using to display the points in browser
+         * @param length    the length of the buffer.  this is index used to insert the new point which in our case is always at the end of the buffer
+         * @return None
+         * 
+         * NOTE:    this table is **not** sorted by the x value of each edge like it should be
+         *          Sorting should be performed after creating this table.
+         */
+        // add a point to the given buffer
+        var pt =[x,y];
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);                                       
+        gl.bufferSubData(gl.ARRAY_BUFFER, 8*length, new Float32Array(pt));        
+    }
 
+    function edgeDetect(points, canvas) {
+        /**
+         * Detect edges and fill the polygon  
+         * This handles creating all of the edge objects and actually performing the scanline function
+         * @param points    vertices of the polygon
+         * @param canvas    the canvas object we are drawing in
+         * @return all of the points that need to be drawn in order to fill the object
+         * 
+         */
+        // add the first point to the end of the point list so that it appears twice.
+        // This way, when we look for edges we will check the line connecting each subsequent point
+        var point_loop = points;
+        point_loop.push(points[0]);
 
-        if(y1>y2)
-        {
-            temp=x1,x1=x2,x2=temp;
-            temp=y1,y1=y2,y2=temp;
-        }
+        // build all edges table
+        var all_edges = buildAllEdges(point_loop);
+        
+        // build the global edges table
+        var global_edges = buildGlobalEdges(point_loop, all_edges);
+        //console.log("GLOBAL: ",JSON.stringify(global_edges));
+        
+        //the scanline is the lowest y_min in the global_edges table
+        var scanline = global_edges[0]['y_min'];
+        var active_edges = [];
 
-        if(y1==y2)
-            mx=x2-x1;
-        else
-            mx=(x2-x1)/(y2-y1);
+        //create an array to hold the fill points
+        var fill_points = []
 
-        x=x1;
+        //as long as we have elements in either the global_edge table or the active_edge table,
+        // we need to perform the scanline algorithm
+        while (global_edges.length > 0 || active_edges.length > 0) {
+            console.log("SCANLINE: y=",scanline);
 
-        for(i=int(y1);i<=(int)y2;i++)
-        {
-            if(x<(float)le[i]) 
-                le[i]=(int)x;
-            if(x>(float)re[i]) 
-                re[i]=(int)x;
+            // initialize the active edge table and initial scanline
+            active_edges = updateActiveEdges(global_edges,scanline, active_edges);
             
-            x+=mx;
+            console.log("ACTIVE: ", JSON.stringify(active_edges));
+
+            // fill all points along the scanline
+            scanlineFill(canvas, active_edges,scanline,fill_points);
+
+            //increment scanline to check the next scanline
+            scanline++;
+        }
+        console.log("Finished scanline!");
+        console.log("Points: ", fill_points);
+
+        return fill_points;
+
+    }
+
+    function updateActiveEdges(global_edges,scanline, active_edges){
+      
+        // first, check if there are any edges that need to be removed for the given scanline
+        toRemove = [];
+        for (i = 0; i < active_edges.length; i++) {
+            if (active_edges[i]['y_max'] == scanline){
+                toRemove.push(i);
+            }
         }
 
+        //remove the edges
+        for (i = toRemove.length-1; i >= 0; i--) {
+            console.log("Removing edge: ", JSON.stringify(active_edges[toRemove[i]]));
+            active_edges.splice(toRemove[i], 1);
         }
+
+        // update the contents of the active_edges array
+        // if there are no edges in the table, then we are creating a new one from scratch
+        // if there are edges in the table, then we need to update the x-value for all existing edges,
+        // and add any new edges that are necessary
+        if (active_edges.length <= 0) {
+            console.log("Building new table for ", scanline);
+            active_edges = buildActiveEdgeTable(global_edges,scanline);
+        }
+        else{
+            console.log("Updating x points for ", scanline);
+            for (i  = 0; i < active_edges.length; i++) {
+                active_edges[i]['x'] = active_edges[i]['x'] + active_edges[i]['1/m'];
+            }
+
+            active_edges = active_edges.concat(buildActiveEdgeTable(global_edges,scanline));
+        }
+
+        //sort active edges on two fields: ymin and x
+        console.log("Active edges pre sort: ", JSON.stringify(active_edges));
+        active_edges = active_edges.sort(function(a,b){
+                                            if(a['x'] < b['x']){return -1;}
+                                            if(a['x'] > b['x']){return 1;}
+                                            if(a['x'] == b['x']){return 0;}
+                                        });
+        console.log("Post sort: ", JSON.stringify(active_edges));
+
+
+
+        return active_edges;
+    }
+
+    function scanlineFill(canvas, active_edges,scanline, fill_points){
+        var parity = 1;
+        //fill in the points on this scan line between all of the active edges.
+        //afterwards, loop back through and update all of the x coordinates on each edge
+        for (i=0; i < active_edges.length-1; i++) {
+            for (j = active_edges[i]['x']; j <= active_edges[i+1]['x']; j++){
+                if (parity == 1) {
+                    var pt =[j, scanline];
+                    var gl_pt = screenToGLPt(canvas,j,scanline);
+                    console.log(j, scanline, gl_pt.x, gl_pt.y);
+                    fill_points.push([gl_pt.x, gl_pt.y]);
+                }
+            }
+        }
+    }
+
+    function buildActiveEdgeTable(global_edges,scanline){
+        /**
+         * Build table of active edges.  
+         * These are edges that are needed to complete the given scanline
+         * @param global_edges
+         * @param scanline
+         * @return array of dictionaries.  Each dictionary is a different edge
+         * 
+         * NOTE:    this table is **not** sorted by the x value of each edge like it should be
+         *          Sorting should be performed after creating this table.
+         */
+        var active_edges = [];
+        var active_indeces = [];
+        //gather the edges that fit this criteria
+        for (i = 0; i < global_edges.length; i++) {
+            if(global_edges[i]['y_min'] == scanline){
+                active_indeces.push(i)
+            }
+        }
+
+        //for each item, take it out of global edges and place it in active edges
+        for (i = active_indeces.length-1; i>=0 ; i--){
+            active_edges.push(global_edges.splice(active_indeces[i], 1)[0]);
+        }
+
+        return active_edges;
+    }
+
+    function buildGlobalEdges(points, all_edges) {
+        /**
+         * Build table of global edges.    
+         * These are edges that have a non-zero slope.  
+         * Since we are using the inverse of the slope, we actually want to check to make sure that the slope is a finite number
+         *
+         * @param points
+         * @param all_edges
+         * @return array of dictionaries.  Each dictionary is a different edge
+         * 
+         */
+        var global_edges = [];
+        for (i = 0; i < all_edges.length; i++){
+            // add all elements with non zero inverse slope into the array
+            if (!isNaN(all_edges[i]['1/m']) && all_edges[i]['1/m'] !== null && isFinite(all_edges[i]['1/m'])){
+                global_edges.push(all_edges[i]);
+            }
+        }
+
+        // sort the array on the y_min key from least to greatest
+        global_edges.sort(function(a,b){
+            return a['y_min'] > b['y_min'] ? 1: -1;
+        });
+
+        return global_edges;
+    }
+
+
+    function buildAllEdges(points) {
+        // build the all_edges table
+        var all_edges = [];
+        for (i = 0; i < points.length-1; i++){
+            // pull two connecting points out of the array
+            var point1 = points[i];
+            var point2 = points[i+1];
+
+            // use the screen coordinates to do all of the math
+            // we will convert them to gl coordinates before we draw
+            var x1 = point1.screen_x;
+            var y1 = point1.screen_y;
+            var x2 = point2.screen_x;
+            var y2 = point2.screen_y;
+
+            var x_val, y_min, y_max, m;
+
+            /*
+            Each adjacent set of vertices (the first and second, second and third, ..., last and first) defines an edge. For each edge, the following information needs to be kept in a table:
+                y_min: The minimum y value of the two vertices.
+                y_max: The maximum y value of the two vertices.
+                x_min: The x value associated with the minimum y value.
+                1/m:   The inverse slope of the edge.  This is run over rise instead of rise over run
+            */
+
+            var y_min,y_max,x_min,m = 0;
+            if (y1 <= y2){
+                y_min = y1;
+                x_val = x1;
+                y_max = y2;
+                //m = (x_val-x1)/(y_max-y_min);
+                m = (x1 - x2)/(y1-y2);
+            }
+            else{
+                y_min = y2;
+                x_val = x2;
+                y_max = y1;
+                //m =(x_val - x2)/(y_max - y_min);
+                m = (x1 - x2)/(y1-y2);
+            }
+            all_edges.push({'y_min':y_min, "y_max":y_max, "x":x_val,"1/m":m});
+        }
+        return all_edges;
+    }
 
     function getMousePos(canvas, evt) {
-        var rect = canvas.getBoundingClientRect();
+        /*
+            Convert a mouse click to OpenGL coordinates
+        */
+        return (screenToGLPt(canvas,evt.clientX, evt.clientY));
+    }
+    function screenToGLPt(canvas,x,y) {
+        /*
+            Convert screen coordinates to OpenGL coordinates
+        */
         return {
-           x: -1 + 2*event.clientX/canvas.width,
-           y: -1 + 2*(canvas.height - event.clientY)/canvas.height
-          //x: evt.clientX - rect.left,
-          //y: evt.clientY - rect.top
-        };
+           x: -1 + 2*x/canvas.width,
+           y: -1 + 2*(canvas.height - y)/canvas.height
+        };   
     }
 
     function render(){
         gl.clear( gl.COLOR_BUFFER_BIT );
-        gl.drawArrays(gl.POINT, 0, index)
+        gl.drawArrays(gl.POINT, 0, index);
         gl.drawArrays(gl.LINE_LOOP, 0, index);
 
 
@@ -150,6 +380,6 @@
     }
     </script>
 </head>
-<body onload="init1()">
-        <canvas id="mycanvas" width="800" height="500"></canvas>
+<body onload="init()">
+        <canvas id="mycanvas" width="250" height="250" style="border:1px solid #000000;"></canvas>
 </body>
