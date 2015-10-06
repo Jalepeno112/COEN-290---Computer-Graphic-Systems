@@ -261,7 +261,6 @@
                 if(parity == 1){
                     var pt =[j, scanline];
                     var gl_pt = screenToGLPt(canvas,j,scanline);
-                    console.log(j, scanline, gl_pt.x, gl_pt.y);
                     fill_points.push([gl_pt.x, gl_pt.y]);
                 }
             }
@@ -399,4 +398,7 @@
 </head>
 <body onload="init()">
         <canvas id="mycanvas" width="250" height="250" style="border:1px solid #000000;"></canvas>
+        <div id="instructions">
+            <p>Click on the screen to draw a point.  Double click when placing your last vertex in order to fill the polygon.</p>
+        </div>
 </body>
