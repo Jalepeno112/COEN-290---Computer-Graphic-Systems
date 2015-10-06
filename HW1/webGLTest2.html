@@ -132,6 +132,7 @@
          * NOTE:    this table is **not** sorted by the x value of each edge like it should be
          *          Sorting should be performed after creating this table.
          */
+
         // add a point to the given buffer
         var pt =[x,y];
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);                                       
@@ -147,6 +148,7 @@
          * @return all of the points that need to be drawn in order to fill the object
          * 
          */
+        
         // add the first point to the end of the point list so that it appears twice.
         // This way, when we look for edges we will check the line connecting each subsequent point
         var point_loop = points;
@@ -157,7 +159,6 @@
         
         // build the global edges table
         var global_edges = buildGlobalEdges(point_loop, all_edges);
-        //console.log("GLOBAL: ",JSON.stringify(global_edges));
         
         //the scanline is the lowest y_min in the global_edges table
         var scanline = global_edges[0]['y_min'];
@@ -169,12 +170,12 @@
         //as long as we have elements in either the global_edge table or the active_edge table,
         // we need to perform the scanline algorithm
         while (global_edges.length > 0 || active_edges.length > 0) {
-            console.log("SCANLINE: y=",scanline);
+            //console.log("SCANLINE: y=",scanline);
 
             // initialize the active edge table and initial scanline
             active_edges = updateActiveEdges(global_edges,scanline, active_edges);
             
-            console.log("ACTIVE: ", JSON.stringify(active_edges));
+            //console.log("ACTIVE: ", JSON.stringify(active_edges));
 
             // fill all points along the scanline
             scanlineFill(canvas, active_edges,scanline,fill_points);
@@ -183,14 +184,22 @@
             scanline++;
         }
         console.log("Finished scanline!");
-        console.log("Points: ", fill_points);
+        //console.log("Points: ", fill_points);
 
         return fill_points;
 
     }
 
     function updateActiveEdges(global_edges,scanline, active_edges){
-      
+        /**
+         * Update the current active edge table (or construct a new one).
+         * This function sorts the active edge table by increasing x coordinate
+         * @param global_edges
+         * @param scanline
+         * @param active_edges
+         * @return list of dictionaries where each dicitonary is a different active edge
+         * 
+         */
         // first, check if there are any edges that need to be removed for the given scanline
         toRemove = [];
         for (i = 0; i < active_edges.length; i++) {
@@ -201,7 +210,6 @@
 
         //remove the edges
         for (i = toRemove.length-1; i >= 0; i--) {
-            console.log("Removing edge: ", JSON.stringify(active_edges[toRemove[i]]));
             active_edges.splice(toRemove[i], 1);
         }
 
@@ -210,11 +218,9 @@
         // if there are edges in the table, then we need to update the x-value for all existing edges,
         // and add any new edges that are necessary
         if (active_edges.length <= 0) {
-            console.log("Building new table for ", scanline);
             active_edges = buildActiveEdgeTable(global_edges,scanline);
         }
         else{
-            console.log("Updating x points for ", scanline);
             for (i  = 0; i < active_edges.length; i++) {
                 active_edges[i]['x'] = active_edges[i]['x'] + active_edges[i]['1/m'];
             }
@@ -223,32 +229,43 @@
         }
 
         //sort active edges on two fields: ymin and x
-        console.log("Active edges pre sort: ", JSON.stringify(active_edges));
         active_edges = active_edges.sort(function(a,b){
                                             if(a['x'] < b['x']){return -1;}
                                             if(a['x'] > b['x']){return 1;}
                                             if(a['x'] == b['x']){return 0;}
                                         });
-        console.log("Post sort: ", JSON.stringify(active_edges));
-
-
-
         return active_edges;
     }
 
     function scanlineFill(canvas, active_edges,scanline, fill_points){
+        /**
+         * Perform scanline algorithm for the current scanline
+         * 
+         * @param canvas
+         * @param active_edges
+         * @param scanline
+         * @param fill_points
+         * @return None
+         * 
+         */
+
         var parity = 1;
+        
         //fill in the points on this scan line between all of the active edges.
         //afterwards, loop back through and update all of the x coordinates on each edge
+        //start with the lowest x value.  Between that and the next x value in the table is a valid area to draw.
+        //if there is another edge in the table, then the next area is not a valid region.
+        // the parity variable allows us to keep track
         for (i=0; i < active_edges.length-1; i++) {
             for (j = active_edges[i]['x']; j <= active_edges[i+1]['x']; j++){
-                if (parity == 1) {
+                if(parity == 1){
                     var pt =[j, scanline];
                     var gl_pt = screenToGLPt(canvas,j,scanline);
                     console.log(j, scanline, gl_pt.x, gl_pt.y);
                     fill_points.push([gl_pt.x, gl_pt.y]);
                 }
             }
+            parity = -1*(parity-1);
         }
     }
 
