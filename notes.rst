@@ -195,4 +195,22 @@ Start with a pixel inside and recursively check its neighboring pixels.
 
 
 
+Clipping
+----------
 
+Point Clipping
+~~~~~~~~~~~~~~~
+Coordinate system.  Set clipping window.  If point falls in box, draw it, otherwise, don't.
+
+Line Clipping
+~~~~~~~~~~~~~~~~
+Have a line, set clipping window.  Only show the points that are within the window.
+
+>>> m = (y_end-y0)/(x_end-x0)
+>>> y = y0 + m(x-x0)
+
+But it is easier to do some preprocessing logic rather than finding the points of intersection of the line and the window.
+
+If P1 and P2 are the ends of the line then:
+    if P1 and P2 are both in the window, then we can keep the entire line
+    if P1 and P2 are both outside the window, we have to decide:

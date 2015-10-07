@@ -184,8 +184,6 @@
             scanline++;
         }
         console.log("Finished scanline!");
-        //console.log("Points: ", fill_points);
-
         return fill_points;
 
     }
@@ -248,23 +246,26 @@
          * @return None
          * 
          */
-
-        var parity = 1;
-        
+        var parity = 1;        
         //fill in the points on this scan line between all of the active edges.
         //afterwards, loop back through and update all of the x coordinates on each edge
         //start with the lowest x value.  Between that and the next x value in the table is a valid area to draw.
         //if there is another edge in the table, then the next area is not a valid region.
         // the parity variable allows us to keep track
         for (i=0; i < active_edges.length-1; i++) {
-            for (j = active_edges[i]['x']; j <= active_edges[i+1]['x']; j++){
+            for (j = active_edges[i]['x']; j < active_edges[i+1]['x']; j++){
                 if(parity == 1){
                     var pt =[j, scanline];
                     var gl_pt = screenToGLPt(canvas,j,scanline);
                     fill_points.push([gl_pt.x, gl_pt.y]);
                 }
             }
-            parity = -1*(parity-1);
+            if (parity == 1) {
+                parity = -1;
+            }
+            else {
+                parity = 1;
+            }
         }
     }
 
@@ -386,9 +387,16 @@
     }
 
     function render(){
+        /**
+         * Render all of the points.
+         *
+         * NOTE:    This is not the optimal way to render everything, but it works.
+         *          The use of LINE_LOOP gives the polygon a nice edge, but it causes an error when filling certain polygons, 
+         *          because it will draw a line over what should be whitespace
+         */
         gl.clear( gl.COLOR_BUFFER_BIT );
         gl.drawArrays(gl.POINT, 0, index);
-        gl.drawArrays(gl.LINE_LOOP, 0, index);
+        //gl.drawArrays(gl.LINE_LOOP, 0, index);
 
 
         window.requestAnimationFrame(render);           
@@ -400,5 +408,6 @@
         <canvas id="mycanvas" width="250" height="250" style="border:1px solid #000000;"></canvas>
         <div id="instructions">
             <p>Click on the screen to draw a point.  Double click when placing your last vertex in order to fill the polygon.</p>
+            <!-- <p>This will sometimes draw an extra line on the polygon after filling it in due to the use of gl.LINE_LOOP</p> -->
         </div>
 </body>
