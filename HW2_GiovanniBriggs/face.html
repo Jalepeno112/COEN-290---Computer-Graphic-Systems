@@ -1,0 +1,177 @@
+<html>
+<head>
+    <meta charset="utf-8">
+    <script src="face-data.js"></script>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+
+    <script id="vertex" type="x-shader">
+        //shader for vertices and points in general
+        attribute vec3 aVertexPosition;
+        attribute vec4 aVertexColor;
+
+        uniform mat4 uMVMatrix;
+        uniform mat4 uPMatrix;
+
+        varying vec4 fColor;
+
+        void main() {
+        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
+            gl_PointSize = 5.0;
+            fColor = aVertexColor;
+        }
+    </script>
+    <script id="fragment" type="x-shader">
+        //shader for fragments
+        precision highp float;
+        varying vec4 fColor;
+        void main() {
+            gl_FragColor = fColor;
+
+        }
+    </script>
+    <script type="text/javascript">
+
+    var points;
+    var verts;
+    var indices;
+    var vbuffer;
+    var vIndexBuffer;
+    var vertexPositionAttribute;
+    var vertexColorAttribute;
+    var verticesColorBuffer;
+
+    function init1(){
+                    /**
+         * Main event loop.  
+         * Initializes all buffers and handles mouse click events.
+         */
+
+        //format face_indicies array into a form that webgl understands
+        //indices = face_indicies;
+        //verts = vertices;
+        indices = [];
+        for (var i = 0; i < face_indicies.length; i ++) {
+            for (var j = 0 ; j < 3; j ++) {
+                indices.push(face_indicies[i][j]);
+            }
+        }
+
+        verts = [];
+        for (var i = 0; i < vertices.length; i ++) {
+            for (var j = 0 ; j < 3; j ++) {
+                verts.push(vertices[i][j]);
+            }
+        }
+
+        console.log("VERTS: ", verts.toString());
+        //create new canvas and webgl elements
+        var canvas = document.getElementById("mycanvas");
+        gl = canvas.getContext("experimental-webgl");   
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.clearDepth(1.0);                 // Clear everything
+        gl.enable(gl.DEPTH_TEST);           // Enable depth testing
+        gl.depthFunc(gl.LEQUAL);            // Near things obscure far things
+
+        //load shaders in order to draw points and lines
+        var v = document.getElementById("vertex").firstChild.nodeValue;
+        var f = document.getElementById("fragment").firstChild.nodeValue;
+
+        //compile vertex shader
+        var vs = gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vs, v);
+        gl.compileShader(vs);
+
+        //compile fragment shader
+        var fs = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fs, f);
+        gl.compileShader(fs);
+        
+        //initialize the WebGL program and attach the necessary shaders
+        var program = gl.createProgram();
+        gl.attachShader(program, vs);
+        gl.attachShader(program, fs);
+        gl.linkProgram(program);
+
+        gl.useProgram(program);
+        vertexPositionAttribute = gl.getAttribLocation(program, "aVertexPosition");
+        gl.enableVertexAttribArray(vertexPositionAttribute);
+
+        vertexColorAttribute = gl.getAttribLocation(program, "aVertexColor");
+        gl.enableVertexAttribArray(vertexColorAttribute);
+        console.log("aVertexPosition: ", vertexPositionAttribute);
+        console.log("aVertexColor: ", vertexColorAttribute);
+
+        // create an array of colors
+        var colors = [
+            [1.0,  1.0,  1.0,  1.0],    // Front face: white
+            [1.0,  0.0,  0.0,  1.0],    // Back face: red
+            [0.0,  1.0,  0.0,  1.0],    // Top face: green
+            [0.0,  0.0,  1.0,  1.0],    // Bottom face: blue
+            [1.0,  1.0,  0.0,  1.0],    // Right face: yellow
+            [1.0,  0.0,  1.0,  1.0]     // Left face: purple
+        ];
+        var generatedColors = [];
+
+        //loop through and create a list of colors for each vertex
+        for (j=0; j<verts.length; j++) {
+            var r = Math.floor(Math.random() * (colors.length - 0) + colors.length);
+            var c = colors[r];
+
+            generatedColors = generatedColors.concat(c);
+        }
+
+        console.log(generatedColors.length, verts.length);
+
+        verticesColorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, verticesColorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(generatedColors), gl.STATIC_DRAW);
+        
+        vbuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbuffer);                                     
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
+
+
+        // Now send the element array to GL
+        vIndexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vIndexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,
+            new Uint16Array(indices), gl.STATIC_DRAW);
+
+
+        gl.enableVertexAttribArray(program.aVertexPosition);
+        gl.vertexAttribPointer(program.aVertexPosition, 3, gl.FLOAT, false, 0, 0);
+
+        render();
+    }
+    function render(){
+        /**
+         * Render all of the points.
+         *
+         */
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbuffer);
+        gl.vertexAttribPointer(vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0);
+
+        // Set the colors attribute for the vertices.
+        gl.bindBuffer(gl.ARRAY_BUFFER, verticesColorBuffer);
+        gl.vertexAttribPointer(vertexColorAttribute, 4, gl.FLOAT, false, 0, 0);
+
+        // Draw the cube.
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, vIndexBuffer);
+        //setMatrixUniforms();
+        gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+        //gl.drawArrays(gl.POINT, 0, face_indicies.length);
+
+        window.requestAnimationFrame(render);           
+
+    }
+    </script>
+</head>
+<body onload="init1()">
+        <canvas id="mycanvas" width="800" height="500" style="border: 2px black solid;"></canvas>
+</body>
+</html>
