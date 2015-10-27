@@ -39,5 +39,21 @@
     <canvas id="glcanvas" width="640" height="480">
       Your browser doesn't appear to support the <code>&lt;canvas&gt;</code> element.
     </canvas>
+    <p>
+      <strong>Instructions</strong></br>
+      Load index.html in a web browser.</br>
+      By default, the face rotates around the y-axis just to demonstrate the rotation effect.</br>
+      Scroll UP to push the object further away</br>
+      Scroll DOWN to bring the object closer</br>
+      CLICK and DRAG on the screen to create a vector around which to rotate the face.</br>
+      If you click and drag horizontally across the screen, it will rotate the face around the x-axis</br>
+      If you click and drag vertically across the screen, it will rotate the face around the y-axis.</br>
+    </p>
+    <p>
+      <strong>NOTE</strong></br>
+      The original file for the point data contained several 2D arrays.  WebGL only handles one dimensional arrays.
+      I wrote a script that flattened the 2D arrays and stored them in <em>face-data-format.js</em>.</br>
+      Coloring on the face is done randomly at run time.
+    </p>
   </body>
 </html>

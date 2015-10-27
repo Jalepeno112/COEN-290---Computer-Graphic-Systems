@@ -13,8 +13,8 @@
   * Instructions:
   *   Load index.html in a web browser.
   *   By default, the face rotates around the y-axis just to demonstrate the rotation effect.
-  *   Move the mouse UP to push the object further away
-  *   Move the mouse DOWN to bring the object closer
+  *   Scroll UP to push the object further away
+  *   Scroll DOWN to bring the object closer
   *   CLICK and DRAG on the screen to create a vector around which to rotate the face.
   *   If you click and drag horizontally across the screen, it will rotate the face around the x-axis
   *   If you click and drag vertically across the screen, it will rotate the face around the y-axis.
@@ -160,14 +160,14 @@ function initBuffers() {
     [1.0,  0.0,  1.0,  1.0]     // Left face: purple
   ];
 
-  // Convert the array of colors into a table for all the vertices.
-
-  var generatedColors = [];
   //loop through and create a list of colors for each vertex
-  for (j=0; j<verts.length; j+=200) {
+  //this nested loop structure tries to create groups of color rather than just pure randomness
+  //it makes the structure of the face easier to identify
+  var generatedColors = [];
+  for (j=0; j<verts.length; j+=150) {
     var r = Math.floor(Math.random() * (colors.length));
     var c = colors[r];
-    for(h = 0; h < 200; h++) {
+    for(h = 0; h < 150; h++) {
       generatedColors = generatedColors.concat(c);
     }
 
