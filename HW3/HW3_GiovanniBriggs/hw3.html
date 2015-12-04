@@ -15,14 +15,34 @@
   uniform vec3 sphere3Center;
 
   bool intersectSphere(vec3 center, vec3 lStart, vec3 lDir, out float dist) {
+    /*
+     * Check if a ray has intersected a sphere
+     *
+     * @param center a vector representing the point at the center of a sphere
+     * @param lStart a vector representing the point at which the ray started
+     * @param lDir a vector representing the direction of the ray
+     * @param dist comes in as an empty vector.  This function will set it to be the distance between the ray and the point of intersection
+     *
+     * @returns True if an intersection occurs, false otherwise
+     */
+    // calculate the line between the center of the sphere and *lStart*
     vec3 c = center - lStart;
+
+    // calculate the angle between lStart and the line c
     float b = dot(lDir, c);
+
+    // dot(c,c) gets us the length of the vector c (the vector between the center of the sphere and the starting point of the ray)
+    // +1.0 is the radius of the sphere squared.  Our spheres all have a radius of 1
     float d = b*b - dot(c, c) + 1.0;
+
+    // if d is less than 0, we did not interesect the sphere.  We set dist to be infintely far away, and return false
     if (d < 0.0) {
       dist = 10000.0;
       return false;
     }
 
+    // otherwise, we did intersect the sphere, but we may have intersected the back of the sphere which is not viewable.
+    // if dist is negative, we treat it like the ray never hit the sphere
     dist = b - sqrt(d);
     if (dist < 0.0) {
       dist = 10000.0;
@@ -31,6 +51,10 @@
 
     return true;
   }
+
+bool intersectCube(vec3 center, vec3 lStart, vec3 lDir, out float dist) {
+  return true;
+}
 
 vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
     /*
@@ -74,7 +98,7 @@ vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
             // the larger the diffuse angle, the greater the diffusion color
             // decreasing the power variable in the *pow* function increases the size of the specular reflection
             // the constants here modify the intensity of the reflection
-            c = 0.3 + 0.4 * pow(spec, 10.0) + 0.7 * diff;
+            c = 0.3 + 0.4 * pow(spec, 10.0) + (0.7 * diff);
         }
     }
     else {
@@ -82,9 +106,12 @@ vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
     }
     
     if (c > 1.0) {
+        // linearly interpolate the color at this point in order to acheive diffuse lighting
+        // mix will interpolate a value between *color* and *[1.6,1.6,1.6]*.  
+        // Changing the values in that second parameter changes the color of the reflected light
         return mix(color, vec3(1.6, 1.6, 1.6), c - 1.0);
     }
-
+    //otherwise just return the constant times the original color value
     return c * color;
   }
 
