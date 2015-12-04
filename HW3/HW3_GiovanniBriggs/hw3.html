@@ -10,9 +10,14 @@
   const vec3 lightDir = vec3(0.577350269, 0.577350269, -0.577350269);
   varying vec3 vPosition;
   uniform vec3 cameraPos;
+
+  //sphere center coordinates
   uniform vec3 sphere1Center;
   uniform vec3 sphere2Center;
   uniform vec3 sphere3Center;
+
+  //cube center coordinates
+  uniform vec3 cube1Center;
 
   bool intersectSphere(vec3 center, vec3 lStart, vec3 lDir, out float dist) {
     /*
@@ -53,8 +58,22 @@
   }
 
 bool intersectCube(vec3 center, vec3 lStart, vec3 lDir, out float dist) {
-  return true;
-}
+    vec3 c = center - lStart;
+    float b = dot(lDir, c);
+    float d = b*b - dot(c, c) + 1.0;
+    if (d < 0.0) {
+      dist = 10000.0;
+      return false;
+    }
+
+    dist = b - sqrt(d);
+    if (dist < 0.0) {
+      dist = 10000.0;
+      return false;
+    }
+
+    return true;
+  }
 
 vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
     /*
@@ -79,7 +98,7 @@ vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
     float diff = max(dot(L,N), 0.0);
 
     float c, d;
-    bool h1, h2, h3;
+    bool h1, h2, h3, h4;
             
     // if either the specular or diffuse angles are greater than 0, then we need to determine more about the point
     if (spec > 0.0 || diff > 0.0) {
@@ -90,7 +109,8 @@ vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
         h1 = intersectSphere(sphere1Center, p, L, d);
         h2 = intersectSphere(sphere2Center, p, L, d);
         h3 = intersectSphere(sphere3Center, p, L, d);
-        if (h1 || h2 || h3) {
+        h4 = intersectCube(cube1Center, p, L, d);
+        if (h1 || h2 || h3 || h4) {
             c = 0.3;
         }
         else {
@@ -130,10 +150,10 @@ vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
      */
 
     //distances between point and the *lStart*.
-    float d1, d2, d3;
+    float d1, d2, d3, d4;
 
     // boolean values to see if there is a sphere in between the point and *lStart*
-    bool h1, h2, h3;
+    bool h1, h2, h3, h4;
 
     // check if sphere 1 is in the way
     h1 = intersectSphere(sphere1Center, lStart, lDir, d1);
@@ -144,6 +164,8 @@ vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
     // check if sphere 3 is in the way
     h3 = intersectSphere(sphere3Center, lStart, lDir, d3);
 
+    // check if cube 1 is in the way
+    h4 = intersectCube(cube1Center, lStart, lDir, d4);
     /*
      * The next group of if statements determine:
      *    a) there is a object between the point and the light source
@@ -153,7 +175,7 @@ vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
 
     // sphere 1 is in the way and is the closest object to *lStart*
     // sphere 1 is colored BLUE
-    if (h1 && d1 < d2 && d1 < d3) {
+    if (h1 && d1 < d2 && d1 < d3 && d1 < d4) {
 
       //calculate the point where the line from *lStart* intersects the object
       pos = lStart + d1 * lDir;
@@ -167,17 +189,25 @@ vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
     }
     // sphere 2 is in the way and is the closest object to *lStart*
     // sphere 2 is colored RED
-    else if (h2 && d2 < d3) {
+    else if (h2 && d2 < d3 && d2 < d4) {
       pos = lStart + d2 * lDir;
       normal = pos - sphere2Center;
       color = vec3(0.9, 0.0, 0.0);
     }
     // if sphere 3 is in the way and is the closest object
     // sphere 3 is colored GREEN
-    else if (h3) {
+    else if (h3 && d3 < d4) {
       pos = lStart + d3 * lDir;
       normal = pos - sphere3Center;
       color = vec3(0.0, 0.9, 0.0);
+    }
+    // if cube1 is in the way
+    // cube1 is colored YELLOW
+    else if(h4) {
+      // the point on the cube where the intersection occurs
+      pos = lStart + d4 * lDir;
+      normal = pos - cube1Center;
+      color = vec3(0.5, 0.5, 0.0);
     }
     // Otherwise, draw a black and white checkerboard pattern 
     else if (lDir.y < -0.01) {
@@ -354,6 +384,8 @@ vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
     sphere1Center = gl.getUniformLocation(shaderProgram, "sphere1Center");
     sphere2Center = gl.getUniformLocation(shaderProgram, "sphere2Center");
     sphere3Center = gl.getUniformLocation(shaderProgram, "sphere3Center");
+    cube1Center = gl.getUniformLocation(shaderProgram,"cube1Center");
+
   }
 
 
@@ -428,6 +460,12 @@ vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
     y3 = Math.sin(t * 1.37) * 1.5;
     z3 = Math.sin(t*1.27) * 1.5;
 
+    /*cube 1 coordinates*/
+    x4 = Math.cos(t * 1.2) * 1.5;
+    y4 = Math.cos(t * 1.3) * 1.5;
+    z4 = Math.sin(t*1.27) * 1.5;
+
+
     /*rotate the camera in a sinsoudial fashion around the scene*/
     cameraFrom = { x: Math.sin(t * 0.4) * 18,
                    y: Math.sin(t * 0.13) * 5 + 5,
@@ -471,6 +509,9 @@ vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
     gl.uniform3f(sphere1Center, x1, y1, z1);
     gl.uniform3f(sphere2Center, x2, y2, z2);
     gl.uniform3f(sphere3Center, x3, y3, z3);
+    gl.uniform3f(cube1Center, x4, y4, z4);
+
+
 
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
