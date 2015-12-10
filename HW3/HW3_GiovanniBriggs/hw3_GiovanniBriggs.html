@@ -1,0 +1,725 @@
+<!--
+NAME:   Giovanni Briggs
+DATE:   12/10/15
+CLASS:  COEN 290: Compurter Graphic Systems
+
+Raytracer Project
+
+This program implements a ray tracer to draw 4 spheres over a white and black checkerboard with a black background.
+
+1 sphere remains stationary while the other sphers rotate around it.
+
+Part 1 Raytracing
+  This code implements a ray tracer in the form of a fragment shader.  
+  The main function implements the basic raytracing algorithm which calculates the appropriate color of each pixel.
+  This fragment shader is also responsible for drawing each sphere relative to its known position.
+  It implements diffuse shading, shadowing and specular lighting.
+
+Part 2 Reflection
+  The reflection code is all contained within one function *reflection*.
+  It calculates the reflection at one point, but also allows the light to bounce 3 times to generate more realistic reflections.
+  If you pause the scene at certain points, the sphere reflects onto the floor, and that the image of the sphere reflected onto the floor reflects back onto the sphere.
+
+Part 3 Refraction
+  The refraction code is contained within the *refraction* function.  The refraction function doesn't work as well as I would like.
+  I'm not sure why, but it makes the scene very grainy and the sphere's don't look as good with it.  However, it appears to accurately cause refraction when one sphere passes behind another, or when the camera is at a good angle.
+  Removing refraction makes the reflections look better too.
+
+Part 4 Extra 
+  The main function of the fragment shader also implements 2x anti-aliasing to better improve the quality of the scene.  The anti-aliasing helps improve the lines on the black and white checkerboard and also soften the shadows.  The Anti-aliasing is achieved via supersampling.
+
+
+The intial code was found at http://people.mozilla.org/~sicking/webgl/raycolor.html
+
+I modified a lot of the code.  
+The extra math functions, and the WebGL initialization functions were not modified.
+However, almsot all of the raytracer as been touched or modified.
+-->
+
+
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Ray Tracer - WebGL - COEN 290</title>
+
+
+<script id="shader-fs" type="x-shader/x-fragment">
+  precision mediump float;
+
+  // location of the light is constant
+  const vec3 lightDir = vec3(0.577, 0.577, -0.577);
+
+  varying vec3 vPosition;
+  uniform vec3 cameraPos;
+
+  //sphere center coordinates
+  uniform vec3 sphere1Center;
+  uniform vec3 sphere2Center;
+  uniform vec3 sphere3Center;
+  uniform vec3 sphere4Center;
+
+  bool intersectSphere(vec3 center, vec3 lStart, vec3 lDir, out float dist) {
+    /*
+     * Check if a ray has intersected a sphere
+     *
+     * @param center a vector representing the point at the center of a sphere
+     * @param lStart a vector representing the point at which the ray started
+     * @param lDir a vector representing the direction of the ray
+     * @param dist comes in as an empty vector.  This function will set it to be the distance between the ray and the point of intersection
+     *
+     * @returns True if an intersection occurs, false otherwise
+     */
+    // calculate the line between the center of the sphere and *lStart*
+    vec3 c = center - lStart;
+
+    // calculate the angle between lStart and the line c
+    float b = dot(lDir, c);
+
+    // dot(c,c) gets us the length of the vector c (the vector between the center of the sphere and the starting point of the ray)
+    // +1.0 is the radius of the sphere squared.  Our spheres all have a radius of 1
+    float d = b*b - dot(c, c) + 1.0;
+
+    // if d is less than 0, we did not interesect the sphere.  We set dist to be infintely far away, and return false
+    if (d < 0.0) {
+      dist = 10000.0;
+      return false;
+    }
+
+    // otherwise, we did intersect the sphere, but we may have intersected the back of the sphere which is not viewable.
+    // if dist is negative, we treat it like the ray never hit the sphere
+    dist = b - sqrt(d);
+    if (dist < 0.0) {
+      dist = 10000.0;
+      return false;
+    }
+
+    return true;
+  }
+
+vec3 lightAt(vec3 N, vec3 V, vec3 color, vec3 p) {
+    /*
+     * Calculate the color of the currrent point
+     * 
+     * @param N the normal vector from point *p*
+     * @param V the negative vector of the *cameraDirection* variable.  It's the vector from point *p* back to the camera
+     * @param color the color at point *p* as determined by **intersectWorld()**
+     * @param p the point we are drawing at
+     */
+    vec3 L = lightDir;
+    
+    // reflect(I,N) is a GLSL function that calculates the reflection direction for an incident vector
+    // I - 2.0 * dot(N, I) * N
+    // https://www.opengl.org/sdk/docs/man/html/reflect.xhtml
+    vec3 R = reflect(-L, N);
+
+    // calculate the specular angle   
+    float spec = max(dot(R,V), 0.0);
+
+    // calculate the diffusion angle
+    float diff = max(dot(L,N), 0.0);
+
+    float c, d;
+    bool h1, h2, h3, h4;
+            
+    // if either the specular or diffuse angles are greater than 0, then we need to determine more about the point
+    if (spec > 0.0 || diff > 0.0) {
+        // if there is any sphere between the point and the light source, we darken it because it falls into the shadow of that sphere
+        // otherwise, there is a clear line of sight, and that point is going to reflect back some of the light.
+        // the intensity of that light is dependent on the relationship between the camera, the light source and that point.
+        // if the camera falls along the path of the light source, then the reflected specular light is going to be stronger than otherwise
+        h1 = intersectSphere(sphere1Center, p, L, d);
+        h2 = intersectSphere(sphere2Center, p, L, d);
+        h3 = intersectSphere(sphere3Center, p, L, d);
+        h4 = intersectSphere(sphere4Center, p, L, d);
+        if (h1 || h2 || h3 || h4) {
+            c = 0.3;
+        }
+        else {
+            // the larger the specular angle, the greater the specular reflection
+            // the larger the diffuse angle, the greater the diffusion color
+            // decreasing the power variable in the *pow* function increases the size of the specular reflection
+            // the constants here modify the intensity of the reflection
+            c = 0.3 + 0.4 * pow(spec, 10.0) + (0.7 * diff);
+        }
+    }
+    else {
+        c = 0.3;
+    }
+    
+    if (c > 1.0) {
+        // linearly interpolate the color at this point in order to acheive diffuse lighting
+        // mix will interpolate a value between *color* and *[1.6,1.6,1.6]*.  
+        // Changing the values in that second parameter changes the color of the reflected light
+        return mix(color, vec3(1.6, 1.6, 1.6), c - 1.0);
+    }
+    //otherwise just return the constant times the original color value
+    return c * color;
+  }
+
+  bool intersectWorld(vec3 lStart, vec3 lDir, out vec3 pos, out vec3 normal, out vec3 color) {
+    /*
+     * Checks to see if there is an object between the point on the plate and a point *lStart* with direction *lDir*
+     * If there is, this function will change the color of that point appropriately based on the camera's relationship to the light source and what objects are in the way.
+     *
+     * @param lStart  the position of our viewpoint
+     * @param lDir    the direction we are looking at from that viewpoint
+     * @param pos     an empty vec3.  This function will set it. It is the point of intersection between *lStart* and the object along *lDir*
+     * @param normal  an empty vec3.  This function will set it. It is the normal vector off the object's surface at point *pos* OR the normal to the floor
+     * @param color   an empty vec3.  This function will set it. It is the color of the **current** point that we are rendering 
+     *
+     * @returns True if there is an object between lStart and the current point along lDir.  False otherwise
+     */
+
+    //distances between point and the *lStart*.
+    float d1, d2, d3, d4;
+
+    // boolean values to see if there is a sphere in between the point and *lStart*
+    bool h1, h2, h3, h4;
+
+    // check if sphere 1 is in the way
+    h1 = intersectSphere(sphere1Center, lStart, lDir, d1);
+
+    // check if sphere 2 is in the way
+    h2 = intersectSphere(sphere2Center, lStart, lDir, d2);
+
+    // check if sphere 3 is in the way
+    h3 = intersectSphere(sphere3Center, lStart, lDir, d3);
+
+    // check if cube 1 is in the way
+    h4 = intersectSphere(sphere4Center, lStart, lDir, d4);
+    /*
+     * The next group of if statements determine:
+     *    a) there is a object between the point and the light source
+     *    b) which object is closest to the ground.
+     * This allows us to color the floor with whichever object is closer
+     */
+
+    // sphere 1 is in the way and is the closest object to *lStart*
+    // sphere 1 is colored BLUE
+    if (h1 && d1 < d2 && d1 < d3 && d1 < d4) {
+
+      //calculate the point where the line from *lStart* intersects the object
+      pos = lStart + d1 * lDir;
+
+      // the normal off of a vector is:
+      //    the vector representing the point on the surface of the sphere / the vector representing the center of the sphere.
+      // this calculates a line segment between the two points that points straight out of the sphere.
+      normal = pos - sphere1Center;
+
+      color = vec3(0.0, 0.0, 0.9);
+    }
+    // sphere 2 is in the way and is the closest object to *lStart*
+    // sphere 2 is colored RED
+    else if (h2 && d2 < d3 && d2 < d4) {
+      pos = lStart + d2 * lDir;
+      normal = pos - sphere2Center;
+      color = vec3(0.9, 0.0, 0.0);
+    }
+    // if sphere 3 is in the way and is the closest object
+    // sphere 3 is colored GREEN
+    else if (h3 && d3 < d4) {
+      pos = lStart + d3 * lDir;
+      normal = pos - sphere3Center;
+      color = vec3(0.0, 0.9, 0.0);
+    }
+    // if cube1 is in the way
+    // cube1 is colored YELLOW
+    else if(h4) {
+      // the point on the cube where the intersection occurs
+      pos = lStart + d4 * lDir;
+      normal = pos - sphere4Center;
+      color = vec3(0.5, 0.5, 0.0);
+    }
+    // Otherwise, draw a black and white checkerboard pattern 
+    else if (lDir.y < -0.01) {
+      pos = lStart + ((lStart.y + 2.7) / -lDir.y) * lDir;
+      // if the position is outside a certain range, then it is not a part of our scene.
+      // Return FALSE to tell the main function to draw the background color at this point
+      if (pos.x*pos.x + pos.z*pos.z > 100.0) {
+        return false;
+      }
+      
+      // the normal vector to the floor is always pointing directly upwards
+      normal = vec3(0.0, 1.0, 0.0);
+      
+      // fract() is equivalent to x - floor(x)
+      // if the fractional component of the x coordiante and z coordinate are both greater than 0.5, we draw a white point
+      // otherwise, draw a black point
+      if (fract(pos.x / 5.0) > 0.5 == fract(pos.z / 5.0) > 0.5) {
+        color = vec3(1.0);
+      }
+      else {
+        color = vec3(0.0);
+      }
+    }
+    // if no intersect happens, then we return FALSE to tell the main function to draw a black point
+    else {
+     return false;
+    }
+
+    return true;
+  }
+
+vec3 reflection(vec3 lStart, vec3 cameraDir) {
+    /*
+     * Calculate the color at the current point due to refraction
+     *
+     * @param lStart the position of the camera.  This will update internally to be the 
+     * @param cameraDir
+     */
+
+    vec3 p1, norm, p2;
+    vec3 col, colT, colM, col3;
+    
+    vec3 intensity = vec3(1.0);
+    float damping = 1.7;
+    // Check if the ray interesects an object in the world.
+    // If it does, then we bounce the light around 3 times after the initial intersection
+    // otherwise, we draw a black point
+    if (intersectWorld(cameraPos, cameraDir, p1, norm, colT)) {
+      
+      //calculate the light at the current point
+      col = lightAt(norm, -cameraDir, colT,p1);
+      
+      colM = (colT + intensity) / damping;
+      cameraDir = reflect(cameraDir, norm);
+
+      //keep bouncing after the first point
+      for (int i = 0; i < 3; i++) {
+        if (intersectWorld(p1, cameraDir, p2, norm, colT)) {
+          col += lightAt(norm, -cameraDir, colT,p2) * colM;
+
+          // the intensity of the reflection
+          colM *= (colT + intensity) / damping;
+   
+          // update the cameraDir to be the point at which the reflection occurs
+          cameraDir = reflect(cameraDir, norm);
+
+          //update the reflection point
+          p1 = p2;
+        }
+      }
+    }
+    else {
+      col = vec3(0.0,0.0,0.0);
+    }
+    return col;
+  }
+
+
+vec3 refraction(vec3 lStart, vec3 cameraDir) {
+    /*
+     * Calculcate the refraction at the current point
+     *
+     * @param lStart the position of the camera
+     * @param cameraDir the direction of the camera
+     *
+     * @returns the color to draw at the current point due to refraction 
+     */
+
+    vec3 p1, norm, p2;
+    vec3 col, colT, colM, col3;
+    
+    vec3 intensity = vec3(1.0);
+    float damping = 1.0;
+    
+    // Check if the ray interesects an object in the world.
+    // If it does, then we bounce the light around 3 times after the initial intersection
+    // otherwise, we draw a black point
+    if (intersectWorld(cameraPos, cameraDir, p1, norm, colT)) {
+      
+      //calculate the light at the current point
+      col = (lightAt(norm, -cameraDir, colT,p1) + intensity);
+      
+      colM = (colT + intensity)/damping;
+
+      // calculate the new camera direction
+      // this the vector at which the camera leaves the sphere
+      cameraDir = refract(cameraDir, norm,0.5);
+
+      if (intersectWorld(p1, cameraDir, p2, norm, colT)) {
+        col += lightAt(norm, -cameraDir, colT,p2) * colM;
+ 
+        // update the cameraDir to be the point at which the reflection occurs
+        cameraDir = refract(cameraDir, norm, 0.5);
+      }
+    }
+    else {
+      col = vec3(0.0,0.0,0.0);
+    }
+    return col;
+}
+
+  void main(void)
+  {
+    // vector between the current point and where the camera is positioned
+    vec3 cameraDir = normalize(vPosition - cameraPos);
+
+   
+    // Calculate the color at the current point
+    // This section also implements 2x anti-aliasing by using super sampling.  This also helps soften the shadows
+    float floati;
+    float floatj;
+    vec3 pos;
+    vec3 result = vec3(0.0, 0.0, 0.0);
+    for (float i = 0.0; i < 2.0; i++){
+      for (float j = 0.0; j < 2.0; j++){
+        floati = 0.9997 + (0.001 * i);
+        floatj = 0.9997 + (0.001 * i);
+        pos = vPosition;
+        pos.x *= floati;
+        pos.y *= floatj;
+        // calculate the color at the point based on reflection and refraction
+        // the refraction has a damping coefficient.  Without it, the entire scene turns bright white.  
+        // However, reducing the value allows there to be actual refraction in the scene
+        cameraDir = normalize(pos - cameraPos);
+        result += reflection(cameraPos, cameraDir) + (0.15 * refraction(cameraPos,cameraDir));
+      }
+    }
+
+    // the result will be 4 times greater than it needs to be
+    // so we divide by 4 here.
+    result.x /= 4.0;
+    result.y /= 4.0;
+    result.z /= 4.0;
+
+    // set the actual color
+    gl_FragColor = vec4(result, 1.0);
+
+
+  }
+</script>
+
+
+<!-- The vertex shader for managing the vertices of the shapes in the scene -->
+<script id="shader-vs" type="x-shader/x-vertex">
+  /*
+   * Vertex shader
+   *
+   * NOTE:  Everything is being drawn on the same Z-axis coordinate, so we don't have to worry about it later in our code.
+   */
+
+  attribute vec2 aVertexPosition;
+  attribute vec3 aPlotPosition;
+
+  varying vec3 vPosition;
+
+  void main(void)
+  {
+    // tell WebGL where to draw the point
+    // always drawn relative to z = 1.0
+    gl_Position = vec4(aVertexPosition, 1.0, 1.0);
+    vPosition = aPlotPosition;
+ }
+</script>
+
+
+
+<!-- Main Javascript function to load and launch the WebGL components and activate the scene -->
+<script type="application/x-javascript">
+
+  var gl;
+  function initGL(canvas) {
+    try {
+      gl = canvas.getContext("experimental-webgl");
+      gl.viewport(0, 0, canvas.width, canvas.height);
+    } catch(e) {
+    }
+    if (!gl) {
+      alert("Could not initialise WebGL, sorry :-(");
+    }
+  }
+
+  function getShader(gl, id)
+  {
+      var shaderScript = document.getElementById(id);
+      if (!shaderScript)
+          return null;
+
+      var shader;
+      if (shaderScript.type == "x-shader/x-fragment")
+      {
+          shader = gl.createShader(gl.FRAGMENT_SHADER);
+      }
+      else if (shaderScript.type == "x-shader/x-vertex")
+      {
+          shader = gl.createShader(gl.VERTEX_SHADER);
+      }
+      else
+      {
+          return null;
+      }
+
+      gl.shaderSource(shader, shaderScript.textContent);
+      gl.compileShader(shader);
+
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+      {
+          alert(gl.getShaderInfoLog(shader));
+          return null;
+      }
+
+      return shader;
+  }
+
+  var shaderProgram;
+  var aVertexPosition;
+  function initShaders()
+  {
+    var fragmentShader = getShader(gl, "shader-fs");
+    var vertexShader = getShader(gl, "shader-vs");
+
+    shaderProgram = gl.createProgram();
+    gl.attachShader(shaderProgram, vertexShader);
+    gl.attachShader(shaderProgram, fragmentShader);
+    gl.linkProgram(shaderProgram);
+
+    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS))
+    {
+      alert("Could not initialise shaders");
+    }
+
+    gl.useProgram(shaderProgram);
+
+    aVertexPosition = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+    gl.enableVertexAttribArray(aVertexPosition);
+
+    aPlotPosition = gl.getAttribLocation(shaderProgram, "aPlotPosition");
+    gl.enableVertexAttribArray(aPlotPosition);
+
+    cameraPos = gl.getUniformLocation(shaderProgram, "cameraPos");
+    sphere1Center = gl.getUniformLocation(shaderProgram, "sphere1Center");
+    sphere2Center = gl.getUniformLocation(shaderProgram, "sphere2Center");
+    sphere3Center = gl.getUniformLocation(shaderProgram, "sphere3Center");
+    sphere4Center = gl.getUniformLocation(shaderProgram,"sphere4Center");
+
+  }
+
+
+  function initBuffers()
+  {
+    /*
+     * Initialize Buffers
+     */
+    vertexPositionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+    var vertices = [
+         1.0,  1.0,
+        -1.0,  1.0,
+         1.0, -1.0,
+        -1.0, -1.0,
+    ];
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, vertexPositionBuffer);
+    gl.vertexAttribPointer(aVertexPosition, 2, gl.FLOAT, false, 0, 0);
+
+
+    var plotPositionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, plotPositionBuffer);
+    gl.vertexAttribPointer(aPlotPosition, 3, gl.FLOAT, false, 0, 0);
+  }
+
+  function crossProd(v1, v2) {
+    return { x: v1.y*v2.z - v2.y*v1.z,
+             y: v1.z*v2.x - v2.z*v1.x,
+             z: v1.x*v2.y - v2.x*v1.y };
+  }
+
+  function normalize(v) {
+    l = Math.sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
+    return { x: v.x/l, y: v.y/l, z: v.z/l };
+  }
+
+  function vectAdd(v1, v2) {
+    return { x: v1.x + v2.x, y: v1.y + v2.y, z: v1.z + v2.z };
+  }
+
+  function vectSub(v1, v2) {
+    return { x: v1.x - v2.x, y: v1.y - v2.y, z: v1.z - v2.z };
+  }
+
+  function vectMul(v, l) {
+    return { x: v.x*l, y: v.y*l, z: v.z*l };
+  }
+
+  function pushVec(v, arr) {
+    arr.push(v.x, v.y, v.z);
+  }
+
+  t = 0;
+  function drawScene()
+  {
+
+    /*
+     * The sphere's rotate around the world based on the time since the application started.
+     * The camera also moves around the world to show the scene from different angles.
+     */
+    /*sphere 1 coordinates*/
+    x1 = Math.sin(t * 1.1) * 1.5;
+    y1 = Math.cos(t * 1.3) * 1.5;
+    z1 = Math.sin(t + Math.PI/3) * 1.5;
+    
+    /*sphere 2 coordinates*/
+    x2 = Math.cos(t * 1.2) * 1.5;
+    y2 = Math.sin(t * 1.4) * 1.5;
+    z2 = Math.sin(t*1.25 - Math.PI/3) * 1.5;
+    
+
+    /*sphere 3 coordinates*/
+    x3 = Math.cos(t * 1.15) * 1.5;
+    y3 = Math.sin(t * 1.37) * 1.5;
+    z3 = Math.sin(t*1.27) * 1.5;
+
+    /*
+     * sphere 4 coordinates
+     * spehere 4 is stationary
+     */
+    /*x4 = Math.cos(1.0) * 1.5;
+    y4 = Math.cos(1.0) * 1.5;
+    z4 = Math.sin(1.0) * 1.5;*/
+    x4 = y4=z4 =1;
+
+
+    /*rotate the camera in a sinsoudial fashion around the scene*/
+    cameraFrom = { x: Math.sin(t * 0.4) * 18,
+                   y: Math.sin(t * 0.13) * 5 + 5,
+                   z: Math.cos(t * 0.4) * 18 };
+
+    cameraTo = { x:0, y:0, z:0 };
+
+    // set our field of view.  The larger the value, the lower our field of view.  The smaller the value, the larger the field.
+    // by increasing the field, the objects in the scene will appear smaller.
+    cameraPersp = 4;
+
+    // logic to move the camera around and set our viewpoint
+    up = { x: 0, y: 1, z: 0 };
+    cameraDir = normalize(vectSub(cameraTo, cameraFrom));
+    cameraLeft = normalize(crossProd(cameraDir, up));
+    cameraUp = normalize(crossProd(cameraLeft, cameraDir));
+    cameraCenter = vectAdd(cameraFrom, vectMul(cameraDir, cameraPersp));
+    cameraTopLeft  = vectAdd(vectAdd(cameraCenter, cameraUp),
+                             vectMul(cameraLeft, ratio));
+    cameraBotLeft  = vectAdd(vectSub(cameraCenter, cameraUp),
+                             vectMul(cameraLeft, ratio));
+    cameraTopRight = vectSub(vectAdd(cameraCenter, cameraUp),
+                             vectMul(cameraLeft, ratio));
+    cameraBotRight = vectSub(vectSub(cameraCenter, cameraUp),
+                             vectMul(cameraLeft, ratio));
+
+    // set the view bounds
+    corners = [];
+    pushVec(cameraTopRight, corners);
+    pushVec(cameraTopLeft, corners);
+    pushVec(cameraBotRight, corners);
+    pushVec(cameraBotLeft, corners);
+
+    // start buffering data
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(corners), gl.STATIC_DRAW);
+
+    // set the camera position and the position of each object
+    gl.uniform3f(cameraPos, cameraFrom.x, cameraFrom.y, cameraFrom.z);
+    gl.uniform3f(sphere1Center, x1, y1, z1);
+    gl.uniform3f(sphere2Center, x2, y2, z2);
+    gl.uniform3f(sphere3Center, x3, y3, z3);
+    gl.uniform3f(sphere4Center, x4, y4, z4);
+
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    // increment the "time" variable to rotate the camera and objects in the scene
+    t += 0.03;
+    if (t > Math.PI * 200) {
+      t -= Math.PI * 200;
+    }
+  }
+
+  var timer = 0;
+
+  var canvas;
+  function webGLStart()
+  {
+    canvas = document.getElementById("canvas");
+    initGL(canvas);
+    initShaders()
+
+    gl.clearColor(0.0, 0.0, 0.0, 1.0);
+
+    gl.clearDepth(1.0);
+
+    initBuffers();
+  }
+
+  function flipAnim()
+  {
+    if (timer) {
+      clearInterval(timer);
+      timer = 0;
+    }
+    else {
+      timer = setInterval(drawScene, 15);
+    }
+  }
+
+  var ratio;
+  function resizeCanvas(w)
+  {
+    if (w == -1) {
+      document.getElementById('contrib').style.display = "none";
+      canvas.style.display = "none";
+      canvas.parentNode.style.position = "absolute";
+      canvas.parentNode.style.top = 0;
+      w = canvas.parentNode.parentNode.offsetWidth;
+      ratio = w / canvas.parentNode.parentNode.offsetHeight;
+      canvas.style.display = "";
+    }
+    else {
+      document.getElementById('contrib').style.display = "";
+      ratio = 1.6;
+      canvas.parentNode.style.position = "";
+      canvas.parentNode.style.top = "";
+      window.onresize = null;
+    }
+    canvas.width = w;
+    canvas.height = w / ratio;
+
+    gl.viewport(0, 0, canvas.width, canvas.height);
+
+    t -= 0.03;
+    drawScene();
+  }
+
+  var resizeTimer = false;
+  function fullScreen() {
+    window.onresize = function() {
+      if (resizeTimer) {
+        clearTimeout(resizeTimer);
+      }
+      resizeTimer = setTimeout(function() {
+        fullScreen();
+      }, 100);
+    };
+    
+    resizeCanvas(-1);
+  }
+
+</script>
+</head>
+
+
+<body onload="webGLStart(); resizeCanvas(600); flipAnim()" style="height: 100%; margin: 0">
+  <div style="height:100%; margin: 0;">
+    <div style="text-align:center; padding: 1em;">
+      <input type="button" onclick="resizeCanvas(400)" value="small">
+      <input type="button" onclick="resizeCanvas(600)" value="medium">
+      <input type="button" onclick="resizeCanvas(800)" value="large">
+      <input type="button" onclick="fullScreen();" value="very large">
+      &nbsp;&nbsp;&nbsp;&nbsp;
+      <input type="button" onclick="flipAnim()" value="pause">
+    </div>
+    <div style="z-index:-1; text-align:center; width:100%;">
+      <canvas id="canvas" style="border: none;" width="600" height="375"></canvas>
+    </div>
+  </div>
+  <div style="margin: -8em 1em 0;" id="contrib">
+  </div>
+
+
+
+</body></html>
